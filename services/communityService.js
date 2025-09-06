@@ -277,12 +277,28 @@ class CommunityService {
         isPrivate: false,
         isActive: true
       })
-      .select('_id name description image tags memberCount createdAt')
-      .populate('creator', 'displayName photoURL', 'User')
+      .select('_id name description image tags memberCount createdAt creator')
       .sort({ createdAt: -1 })
       .limit(50); // Limit to prevent performance issues
 
-      return communities;
+      // Manually populate creator information using Firebase UID
+      const populatedCommunities = await Promise.all(
+        communities.map(async (community) => {
+          const creator = await User.findOne({ firebaseUid: community.creator })
+            .select('displayName photoURL');
+          
+          return {
+            ...community.toObject(),
+            creator: creator ? {
+              _id: creator._id,
+              displayName: creator.displayName,
+              photoURL: creator.photoURL
+            } : null
+          };
+        })
+      );
+
+      return populatedCommunities;
     } catch (error) {
       throw new Error(`Error fetching public communities: ${error.message}`);
     }

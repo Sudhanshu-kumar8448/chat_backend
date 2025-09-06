@@ -24,6 +24,11 @@ const reportRoutes = require('./routes/reports');
 const app = express();
 const server = http.createServer(app);
 
+// Trust proxy configuration for production deployment (Render, Heroku, etc.)
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1); // Trust first proxy
+}
+
 // Initialize Firebase Admin SDK
 initializeFirebase();
 
