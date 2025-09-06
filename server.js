@@ -146,7 +146,9 @@ app.use((error, req, res, next) => {
 
 // Start server
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+const HOST = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
+
+server.listen(PORT, HOST, () => {
   console.log(`
 🚀 Community Chat Backend Server Started Successfully!
 
