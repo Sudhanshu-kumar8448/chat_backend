@@ -34,8 +34,7 @@ class CommunityService {
   // Get community by ID
   static async getCommunityById(communityId, userUid) {
     try {
-      const community = await Community.findById(communityId)
-        .populate('members.userId', 'firebaseUid displayName photoURL status', 'User');
+      const community = await Community.findById(communityId);
 
       if (!community || !community.isActive) {
         throw new Error('Community not found');
@@ -47,7 +46,46 @@ class CommunityService {
         throw new Error('Access denied to private community');
       }
 
-      return community;
+      // Manually populate member information
+      const populatedMembers = await Promise.all(
+        community.members.map(async (member) => {
+          const user = await User.findOne({ firebaseUid: member.userId })
+            .select('displayName photoURL status');
+          
+          return {
+            ...member.toObject(),
+            userId: user ? {
+              firebaseUid: member.userId,
+              displayName: user.displayName,
+              photoURL: user.photoURL,
+              status: user.status
+            } : {
+              firebaseUid: member.userId,
+              displayName: 'Unknown User',
+              photoURL: null,
+              status: 'offline'
+            }
+          };
+        })
+      );
+
+      // Also populate creator information
+      const creator = await User.findOne({ firebaseUid: community.creator })
+        .select('displayName photoURL');
+
+      return {
+        ...community.toObject(),
+        members: populatedMembers,
+        creator: creator ? {
+          firebaseUid: community.creator,
+          displayName: creator.displayName,
+          photoURL: creator.photoURL
+        } : {
+          firebaseUid: community.creator,
+          displayName: 'Unknown User',
+          photoURL: null
+        }
+      };
     } catch (error) {
       throw new Error(`Error getting community: ${error.message}`);
     }
