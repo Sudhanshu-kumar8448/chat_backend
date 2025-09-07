@@ -9,6 +9,12 @@ class MessageService {
     try {
       const { content, communityId, recipientId, mentions, replyTo, priority } = messageData;
 
+      // First, get the sender's MongoDB User document
+      const sender = await User.findOne({ firebaseUid: senderUid });
+      if (!sender) {
+        throw new Error('Sender not found in database');
+      }
+
       // Validate message recipients
       if (communityId && recipientId) {
         throw new Error('Message cannot have both community and recipient');
@@ -75,10 +81,10 @@ class MessageService {
         }
       }
 
-      // Create message
+      // Create message with MongoDB ObjectId as senderId
       const message = new Message({
         messageId: uuidv4(),
-        senderId: senderUid,
+        senderId: sender._id, // Use MongoDB ObjectId instead of Firebase UID
         communityId: communityId || null,
         recipientId: recipientId || null,
         content,
@@ -89,9 +95,16 @@ class MessageService {
 
       await message.save();
 
-      // Populate sender info
-      const populatedMessage = await Message.findById(message._id)
-        .populate('senderId', 'firebaseUid displayName photoURL', 'User');
+      // Manually populate sender info since we can't use populate with mixed ID types
+      const populatedMessage = {
+        ...message.toObject(),
+        senderId: {
+          _id: sender._id,
+          firebaseUid: sender.firebaseUid,
+          displayName: sender.displayName,
+          photoURL: sender.photoURL
+        }
+      };
 
       return populatedMessage;
     } catch (error) {
@@ -104,6 +117,12 @@ class MessageService {
     try {
       const skip = (page - 1) * limit;
       let query = { isDeleted: false };
+
+      // Get user's MongoDB ObjectId
+      const user = await User.findOne({ firebaseUid: userUid });
+      if (!user) {
+        throw new Error('User not found');
+      }
 
       if (communityId) {
         // Check community membership
@@ -119,10 +138,16 @@ class MessageService {
 
         query.communityId = communityId;
       } else if (recipientId) {
-        // Private chat messages
+        // Get recipient's MongoDB ObjectId
+        const recipient = await User.findOne({ firebaseUid: recipientId });
+        if (!recipient) {
+          throw new Error('Recipient not found');
+        }
+
+        // Private chat messages - use MongoDB ObjectIds
         query.$or = [
-          { senderId: userUid, recipientId },
-          { senderId: recipientId, recipientId: userUid }
+          { senderId: user._id, recipientId },
+          { senderId: recipient._id, recipientId: userUid }
         ];
       } else {
         throw new Error('Either communityId or recipientId is required');
@@ -149,7 +174,13 @@ class MessageService {
         throw new Error('Message not found');
       }
 
-      if (message.senderId !== userUid) {
+      // Get user's MongoDB ObjectId to compare with senderId
+      const user = await User.findOne({ firebaseUid: userUid });
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      if (message.senderId.toString() !== user._id.toString()) {
         throw new Error('Only message sender can edit');
       }
 
@@ -182,8 +213,14 @@ class MessageService {
         throw new Error('Message not found');
       }
 
+      // Get user's MongoDB ObjectId
+      const user = await User.findOne({ firebaseUid: userUid });
+      if (!user) {
+        throw new Error('User not found');
+      }
+
       // Check if user can delete (sender or community admin)
-      let canDelete = message.senderId === userUid;
+      let canDelete = message.senderId.toString() === user._id.toString();
 
       if (!canDelete && message.communityId) {
         const community = await Community.findById(message.communityId);
@@ -291,6 +328,12 @@ class MessageService {
         'content.text': { $regex: query, $options: 'i' }
       };
 
+      // Get user's MongoDB ObjectId
+      const user = await User.findOne({ firebaseUid: userUid });
+      if (!user) {
+        throw new Error('User not found');
+      }
+
       if (communityId) {
         // Check community membership
         const community = await Community.findById(communityId);
@@ -315,8 +358,8 @@ class MessageService {
 
         searchQuery.$or = [
           { communityId: { $in: communityIds } },
-          { senderId: userUid },
-          { recipientId: userUid }
+          { senderId: user._id }, // Use MongoDB ObjectId
+          { recipientId: userUid } // recipientId is still Firebase UID
         ];
       }
 

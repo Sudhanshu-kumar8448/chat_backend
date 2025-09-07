@@ -7,7 +7,7 @@ const messageSchema = new mongoose.Schema({
     unique: true
   },
   senderId: {
-    type: String, // Firebase UID
+    type: mongoose.Schema.Types.ObjectId, // MongoDB ObjectId
     required: true,
     ref: 'User'
   },
