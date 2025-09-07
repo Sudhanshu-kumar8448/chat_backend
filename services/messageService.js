@@ -4,6 +4,26 @@ const User = require('../models/User');
 const { v4: uuidv4 } = require('uuid');
 
 class MessageService {
+  // Helper function to transform message response format
+  static transformMessageResponse(message) {
+    const messageObj = message.toObject ? message.toObject() : message;
+    
+    // If senderId is populated (object), transform it to sender
+    if (messageObj.senderId && typeof messageObj.senderId === 'object') {
+      return {
+        ...messageObj,
+        sender: messageObj.senderId,
+        senderId: messageObj.senderId._id // Keep the ObjectId for internal use
+      };
+    }
+    
+    return messageObj;
+  }
+
+  // Transform array of messages
+  static transformMessagesResponse(messages) {
+    return messages.map(message => this.transformMessageResponse(message));
+  }
   // Send message
   static async sendMessage(senderUid, messageData) {
     try {
@@ -98,12 +118,14 @@ class MessageService {
       // Manually populate sender info since we can't use populate with mixed ID types
       const populatedMessage = {
         ...message.toObject(),
-        senderId: {
+        sender: {
           _id: sender._id,
           firebaseUid: sender.firebaseUid,
           displayName: sender.displayName,
           photoURL: sender.photoURL
-        }
+        },
+        // Remove senderId to avoid confusion
+        senderId: undefined
       };
 
       return populatedMessage;
@@ -159,7 +181,8 @@ class MessageService {
         .skip(skip)
         .limit(limit);
 
-      return messages.reverse(); // Return in chronological order
+      const reversedMessages = messages.reverse(); // Return in chronological order
+      return this.transformMessagesResponse(reversedMessages);
     } catch (error) {
       throw new Error(`Error getting messages: ${error.message}`);
     }
@@ -198,7 +221,7 @@ class MessageService {
       const populatedMessage = await Message.findById(message._id)
         .populate('senderId', 'firebaseUid displayName photoURL', 'User');
 
-      return populatedMessage;
+      return this.transformMessageResponse(populatedMessage);
     } catch (error) {
       throw new Error(`Error editing message: ${error.message}`);
     }
@@ -370,7 +393,7 @@ class MessageService {
         .skip(skip)
         .limit(limit);
 
-      return messages;
+      return this.transformMessagesResponse(messages);
     } catch (error) {
       throw new Error(`Error searching messages: ${error.message}`);
     }
